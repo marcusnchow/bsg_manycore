@@ -63,6 +63,10 @@ public:
     // send the sync signal to the center tile of the row
     // executed by all tiles in the group.
     void sync (unsigned char center_x_cord) {
+
+        // Initialize done_list and local_alert
+        this->reset();
+
         //write to the corresponding done
         volatile unsigned char *done_list_ptr = 
             reinterpret_cast<volatile unsigned char*>(
@@ -147,6 +151,10 @@ public:
     // send the sync signal to the center tile of the column
     // executed by all tiles in the center row
     void sync(unsigned char center_x_cord, unsigned char center_y_cord ){
+
+        // Initialize done_list and local_alert
+        this->reset();
+
         //write to the corresponding done
         volatile unsigned char *done_list_ptr = 
             reinterpret_cast<volatile unsigned char*>(
