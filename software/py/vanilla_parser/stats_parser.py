@@ -293,8 +293,11 @@ class VanillaStatsParser:
                 # generate timing stats for each vcache bank 
                 self.vcache_tile_group_stat, self.vcache_stat = self.__generate_vcache_stats(self.vcache_traces, self.active_vcaches)
         
-                # Calculate total aggregate stats for manycore vcahe by summing up per vcache bank stat counts
-                self.manycore_vcache_stat, self.manycore_vcache_tile_group_stat = self.__generate_manycore_vcache_stats_all(self.vcache_stat, self.vcache_tile_group_stat)
+                # Calculate total aggregate vcache stats for manycore by summing up per vcache bank stat counts
+                self.manycore_vcache_stat = self.__generate_manycore_vcache_stats_all(self.vcache_stat)
+
+                # Calculate total aggregate vcache stats for each tile group in manycore by summing up per vcache bank stat counts
+                self.manycore_vcache_tile_group_stat = self.__generate_tile_group_vcache_stats_all(self.vcache_tile_group_stat)
 
             # Victim cache stats is optional, if it's not found we throw a warning and skip
             # vcache stats generation, but do not hault the vanilla stats generation
@@ -1518,21 +1521,23 @@ class VanillaStatsParser:
     # contrary to vanilla stats, vcache stats can be printed multiple times, every time
     # a tile invokes print_stat, the stat for all vcache banks is printed 
     # Therefore, if multiple stats of the same vcache bank and the same tag are seen,
+    # or multiple stats of the same vcache bank, same tag and same tile group ID are seen,
     # the earliest (latest) stat is chosen if it is a start (end) stat.
     def __generate_vcache_stats(self, traces, vcaches):
         tags = list(range(self.max_tags)) + ["kernel"]
         num_tile_groups = {tag:0 for tag in tags}
 
+        # Dictionary to contain operation count for every tag and vcache bank
+        # For aggregate vcache stats of the manycore, the vcache dimension of 
+        # this dictionary is sum reduced in the generate_manycore_vcache_stats_all function
         vcache_stat_start = {tag: {vcache:Counter() for vcache in vcaches} for tag in tags}
         vcache_stat_end   = {tag: {vcache:Counter() for vcache in vcaches} for tag in tags}
         vcache_stat       = {tag: {vcache:Counter() for vcache in vcaches} for tag in tags}
 
-
-        # vcache_tile_group_stat_start = {tag: [Counter() for tg_id in range(self.max_tile_groups)] for tag in tags}
-        # vcache_tile_group_stat_end   = {tag: [Counter() for tg_id in range(self.max_tile_groups)] for tag in tags}
-        # vcache_tile_group_stat       = {tag: [Counter() for tg_id in range(self.max_tile_groups)] for tag in tags}
-
-
+        # Dictionary to contain operation count for every tag, vcache bank
+        # and tile group ID.
+        # For aggregate vcache stats of a tile group, the tile group id dimension of 
+        # this dictionary is sum reduced in the generate_tile_group_vcache_stats_all function
         vcache_tile_group_stat_start = {tag: {tg_id: {vcache: Counter() for vcache in vcaches} for tg_id in range(max(self.num_tile_groups.values()))} for tag in tags}
         vcache_tile_group_stat_end   = {tag: {tg_id: {vcache: Counter() for vcache in vcaches} for tg_id in range(max(self.num_tile_groups.values()))} for tag in tags}
         vcache_tile_group_stat       = {tag: {tg_id: {vcache: Counter() for vcache in vcaches} for tg_id in range(max(self.num_tile_groups.values()))} for tag in tags}
@@ -1616,10 +1621,10 @@ class VanillaStatsParser:
                 vcache_stat[tag][vcache] = vcache_stat_end[tag][vcache] - vcache_stat_start[tag][vcache]
 
 
-
-        # Generate all tile group vcache stats by subtracting start time from end time
+        # Generate all tile group vcache stats by
+        #  subtracting start time from end time
         for tag in tags:
-            for tg_id in range(self.num_tile_groups[tag]): #BORNA TODO
+            for tg_id in range(self.num_tile_groups[tag]): 
                 for vcache in vcaches:
                     vcache_tile_group_stat[tag][tg_id][vcache] = vcache_tile_group_stat_end[tag][tg_id][vcache] - vcache_tile_group_stat_start[tag][tg_id][vcache]
 
@@ -1699,16 +1704,28 @@ class VanillaStatsParser:
 
     # Calculate aggregate vcache stats dictionary by summing 
     # all per vcache bank dictionaries
-    def __generate_manycore_vcache_stats_all(self, vcache_stat, vcache_tile_group_stat):
+    def __generate_manycore_vcache_stats_all(self, vcache_stat):
         # Create a dictionary and initialize elements to zero
         tags = list(range(self.max_tags)) + ["kernel"]
         manycore_vcache_stat = {tag: Counter() for tag in tags}
-        manycore_vcache_tile_group_stat = {tag: [Counter() for tg_id in range(max(self.num_tile_groups.values()))] for tag in tags}
 
         for tag in tags:
             for vcache in self.active_vcaches:
                 for op in self.vcache_all_ops:
                     manycore_vcache_stat[tag][op] += vcache_stat[tag][vcache][op]
+
+        return manycore_vcache_stat
+
+
+
+
+    # Calculate aggregate vcache stats dictionary for every  
+    # tile group by summing all per vcache bank dictionaries
+    # for all tiles belonding to a certain tile group
+    def __generate_tile_group_vcache_stats_all(self,  vcache_tile_group_stat):
+        # Create a dictionary and initialize elements to zero
+        tags = list(range(self.max_tags)) + ["kernel"]
+        manycore_vcache_tile_group_stat = {tag: [Counter() for tg_id in range(max(self.num_tile_groups.values()))] for tag in tags}
 
         for tag in tags:
             for tg_id in range(self.num_tile_groups[tag]):
@@ -1716,11 +1733,10 @@ class VanillaStatsParser:
                     for op in self.vcache_all_ops:
                         manycore_vcache_tile_group_stat[tag][tg_id][op] += vcache_tile_group_stat[tag][tg_id][vcache][op]
 
-        return manycore_vcache_stat, manycore_vcache_tile_group_stat
+        return manycore_vcache_tile_group_stat
 
 
  
-
 
     # Parses stat file's header to generate list of all 
     # operations based on type (stat, instruction, miss, stall)
