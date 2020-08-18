@@ -7,7 +7,7 @@ endif
 # Sets "VCS" variable
 include $(BSG_MANYCORE_DIR)/../bsg_cadenv/cadenv.mk
 
-MACHINES = 9x15
+MACHINES = 4x4
 
 SIMV = $(addsuffix /simv, $(MACHINES))
 SIMV_DEBUG = $(addsuffix /simv-debug, $(MACHINES))
@@ -43,6 +43,7 @@ all: $(SIMV)
 		-f sv.include $(VCS_INCDIR) $(VCS_DEFINE) | tee -i $*/build-debug.log
 
 clean:
-	rm -rf csrc $(SIMV_DAIDIR)
-	rm -f $(SIMV) $(SIMV_DEBUG)
-	rm $(wildcard */*.log)
+	rm -rf csrc
+	rm -rf */*.log */*.daidir */simv */simv-debug
+	rm -rf stack.info.*
+	rm -f vc_hdrs.h
